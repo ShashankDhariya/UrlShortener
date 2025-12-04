@@ -6,6 +6,7 @@ import com.example.Url.Shortener.dto.UrlRequestDTO;
 import com.example.Url.Shortener.dto.UrlResponseDTO;
 import com.example.Url.Shortener.entity.UrlEntity;
 import com.example.Url.Shortener.service.UrlService;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -55,8 +56,24 @@ public class UrlController {
 
     @GetMapping("/analytics/top")
     public ResponseEntity<?> getTopUrls() {
-        List<UrlEntity> topUrl = urlService.getTop10();
+        List<UrlEntity> topUrl = urlService.getTop3();
         return ResponseEntity.ok(topUrl);
+    }
+
+    @GetMapping("/analytics/clicks/{code}")
+    public ResponseEntity<?> getClicksCode(@PathVariable String code) {
+        long clicks = urlService.getClicks(code);
+        return ResponseEntity.ok(clicks);
+    }
+
+    @GetMapping("/analytics/most-clicked")
+    public List<UrlEntity> getMostClickedUrls() {
+        return urlService.getMostClicked();
+    }
+
+    @GetMapping("/analytics/last/{days}")
+    public List<UrlEntity> createdInLastXDays(@PathVariable int days) {
+        return urlService.createdInLastXDays(days);
     }
 
     @GetMapping("/analytics/{shortUrl}")
@@ -90,5 +107,10 @@ public class UrlController {
         }
 
         return ResponseEntity.ok("URL deleted successfully");
+    }
+
+    @GetMapping("/urls")
+    public Page<UrlEntity> getUrls(@RequestParam int page, @RequestParam int size) {
+        return urlService.getPaginated(page, size);
     }
 }

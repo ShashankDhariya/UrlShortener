@@ -5,9 +5,9 @@ import com.example.Url.Shortener.dto.UrlRequestDTO;
 import com.example.Url.Shortener.dto.UrlResponseDTO;
 import com.example.Url.Shortener.entity.UrlEntity;
 import com.example.Url.Shortener.repository.UrlRepository;
-import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.InvalidUrlException;
 
@@ -118,8 +118,12 @@ public class UrlService {
         return urlRepository.findAll();
     }
 
-    public List<UrlEntity> getTop10() {
-        return urlRepository.findTop5ByOrderByClicksDesc();
+    public List<UrlEntity> getTop3() {
+        return urlRepository.findTop3ByOrderByClicksDesc();
+    }
+
+    public List<UrlEntity> createdInLastXDays(int days) {
+        return urlRepository.findByCreatedAtAfter(LocalDateTime.now().minusDays(days));
     }
 
     public UrlAnalyticsDTO getAnalytics(String shortUrl) {
@@ -164,5 +168,27 @@ public class UrlService {
 
         urlRepository.delete(urlEntity);
         return true;
+    }
+
+    public Long getClicks(String shortUrl) {
+        UrlEntity urlEntity = urlRepository.findByShortUrl(shortUrl);
+
+        if(urlEntity == null) {
+            throw new RuntimeException("Url Not Found");
+        }
+
+        return urlEntity.getClicks();
+    }
+
+    public List<UrlEntity> getMostClicked() {
+        return urlRepository.findAll()
+                .stream()
+                .sorted((a,b) -> Long.compare(b.getClicks(), a.getClicks()))
+                .toList();
+    }
+
+    public Page<UrlEntity> getPaginated(int page, int size) {
+        PageRequest request = PageRequest.of(page, size);
+        return urlRepository.findAll(request);
     }
 }

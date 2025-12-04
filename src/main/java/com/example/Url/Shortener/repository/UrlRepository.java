@@ -8,7 +8,6 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface UrlRepository extends JpaRepository<UrlEntity, Long> {
@@ -19,5 +18,7 @@ public interface UrlRepository extends JpaRepository<UrlEntity, Long> {
 
     void deleteByExpiryAtBefore(LocalDateTime time);
 
-    List<UrlEntity> findTop5ByOrderByClicksDesc();
+    List<UrlEntity> findTop3ByOrderByClicksDesc();
+
+    List<UrlEntity> findByCreatedAtAfter(LocalDateTime time);
 }
