@@ -8,22 +8,29 @@ import com.example.Url.Shortener.repository.UrlRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.config.FixedRateTask;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.InvalidUrlException;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 @Service
 @Slf4j
 public class UrlService {
     private final UrlRepository urlRepository;
+    private final RedisTemplate<String, Object> redisTemplate;
 
-    UrlService(UrlRepository urlRepository) {
+    UrlService(UrlRepository urlRepository, RedisTemplate<String, Object> redisTemplate) {
         this.urlRepository = urlRepository;
+        this.redisTemplate = redisTemplate;
     }
 
     public UrlResponseDTO createShortUrl(UrlRequestDTO request) {
@@ -55,6 +62,8 @@ public class UrlService {
                 .build();
 
         urlRepository.save(urlEntity);
+        redisTemplate.opsForValue().set("url" + finalShort, originalUrl, Duration.ofHours(12));
+        redisTemplate.opsForValue().setIfAbsent("clicks" + finalShort, 0L);
 
         log.info("Created short URL: {} -> {} (expires in 7 days)", finalShort, request.getUrl());
 
@@ -97,6 +106,15 @@ public class UrlService {
     }
 
     public String getOriginalUrl(String  shortUrl) {
+        String urlKey = "url" + shortUrl;
+        String clickKey = "clicks" + shortUrl;
+
+        String cachedUrl =  (String) redisTemplate.opsForValue().get(urlKey);
+        if(cachedUrl != null) {
+            redisTemplate.opsForValue().increment(clickKey);
+            return cachedUrl;
+        }
+
         UrlEntity urlEntity = urlRepository.findByShortUrl(shortUrl);
 
         if(urlEntity == null)
@@ -107,11 +125,39 @@ public class UrlService {
             return "Expired";
         }
 
-        urlEntity.setClicks(urlEntity.getClicks() + 1);
-
-        urlRepository.save(urlEntity);
+        redisTemplate.opsForValue().set(urlKey, urlEntity.getOriginalUrl(), Duration.ofHours(12));
+        redisTemplate.opsForValue().increment(clickKey);
 
         return urlEntity.getOriginalUrl();
+    }
+
+    @Scheduled(fixedRate = 30000)
+    private void syncClicksToDB() {
+        log.info("Syncing clicks to DB");
+
+        Set<String> keys = redisTemplate.keys("clicks*");
+        if(keys.isEmpty()) {
+            return;
+        }
+
+        for(String key : keys) {
+            String shortUrl = key.replace("clicks", "");
+
+            Long redisClicks = (Long) redisTemplate.opsForValue().get(key);
+            if(redisClicks == null) {
+                continue;
+            }
+
+            UrlEntity urlEntity = urlRepository.findByShortUrl(shortUrl);
+            if(urlEntity == null) {
+                continue;
+            }
+
+            urlEntity.setClicks(redisClicks);
+            urlRepository.save(urlEntity);
+        }
+
+        log.info("Synced Successfully");
     }
 
     public List<UrlEntity> getAll() {
@@ -167,6 +213,8 @@ public class UrlService {
         }
 
         urlRepository.delete(urlEntity);
+        redisTemplate.delete("url" + shortUrl);
+        redisTemplate.delete("clicks" + shortUrl);
         return true;
     }
 
